@@ -1,0 +1,15 @@
+readr
+MuMIn
+nlme
+mgcv
+MASS
+ggplot2
+tidyverse
+tibble
+tidyr
+purrr
+dplyr
+stringr
+forcats
+janitor
+VGAM

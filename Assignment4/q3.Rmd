@@ -1,0 +1,399 @@
+---
+title: "question3"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+set.seed(123)
+library(readr)
+library(MuMIn)
+library(mgcv)
+library(MASS)
+
+library(ggplot2)
+library(tidyverse)
+library(janitor)
+library(VGAM)
+```
+
+```{r data, cache=T, include = F}
+bike.df <- read_csv("bike.csv")
+for (i in c('season', 'yr', 'mnth', 'holiday', 'weekday', 'weathersit')) {
+  
+  bike.df[[paste(i)]] <- factor(bike.df[[paste(i)]])
+  
+}
+
+
+```
+
+
+INSERT ANSWERS BELOW--------
+
+## a) Explanatory Data Analysis
+
+### Q1: What seasons of the year are most rides taken on? 
+
+```{r}
+#First Question
+bike.df%>%
+  group_by(season)%>%
+  summarise("Total Bikes Rented" = sum(cnt))
+```
+
+Most rides are taken in the the season == 3,  which is Fall (Autumn), with 1,061,129	bikes rented.
+
+Before examining the next question, I will remove the weather sit 4 as it is a typo.
+
+```{r}
+bike.df <- bike.df[!bike.df$weathersit == '4',]
+```
+
+
+### Q2: Is the difference mainly due to the different weather conditions between seasons?
+
+```{r, fig.dim = c(7, 3)}
+
+weather_names <- list(
+  "Clear",
+  "Mist/Cloudy",
+  "Snow/Rain/Storm"
+)
+weather_labeller <- function(variable,value){
+  return(weather_names[value])
+}
+
+ggplot(bike.df,
+       aes(season, cnt))+
+  geom_boxplot()+
+  facet_grid(~weathersit, labeller=weather_labeller) +
+  xlab('Season')+
+  ylab('Number of Bikes Rented')+
+  ggtitle('Bikes Rented By Season & Weather (Boxplot)')+
+  scale_x_discrete(labels=c("Spring","Summer", "Autumn", "Winter"))
+
+
+```
+
+No, this is difference is not due tot he weather. In this plot above we see we have higher numbers of bikes rented in Autumn regardless of the weather.
+
+## b) Using GLM's to Answer II
+### Q1: How are wind speed and the number of bike rentals related? 
+
+We can answer this question by fitting a GLM with the formula $log(\mu_i) = \beta_0 + \beta_1\times WindSpeed_i$
+Where $\mu_i$ is the number of bikes rented.
+But before that I'll check for non-linear relationships using GAM.
+
+```{r, cache = T, fig.dim = c(8, 3.5)}
+fit1 <- mgcv::gam(cnt ~ s(windspeed), data = bike.df, family = "poisson")
+plot(fit1, xlab = "Normalized Windspeed", main = "GAM Plot for Windspeed")
+abline(v = 0.4)
+
+```
+
+The GAM plot indicates a clear non-linear relationship between normalized windspeed and number of bikes rented.
+
+I then fit a glm with a quadratic term. However residual deviance was incredibly high, suggesting overdispersion. I fit a negative binomial model instead.
+```{r}
+bike.df$windspeed2 <- bike.df$windspeed^2
+
+#Poisson Fit
+poissonFit1 <- glm(cnt~ windspeed + windspeed2, data = bike.df, family  = 'poisson')
+#Incredibly Large Deviance
+summary(poissonFit1)$deviance
+
+#Negative Binomial Instead
+fit1 <- glm.nb(cnt ~ windspeed + windspeed2, data = bike.df)
+
+#Deviance much improved
+summary(fit1)$deviance
+
+#P-Values HERE
+summary(fit1)$coefficients[,4]
+```
+
+The respective p-values confirm what was suggested by the GAM plots. Windspeed and Number of bikes rented have a significant non-linear relationship. The GAM plot indicated initially as Normalized windspeed increases, more people rent bikes, but as it increases past approximatley 0.4, bikes rented declines.
+
+*Note: I only printed p-values to avoid complicating my output.*
+### Q2: Is this relationship the same for a holiday and a working day.
+
+We can fit the following model to study this question 
+$$log(\mu_i) = \beta_0 + \beta_1\times Windspeed_i + \beta_2\times Windspeed_i^2 + \beta_3\times Windspeed_i\times Holiday_i + \beta_4\times Windspeed_i^2 \times Holiday_i$$
+
+```{r}
+
+fit2 <- glm.nb(cnt ~ windspeed + windspeed2 + windspeed:holiday + windspeed2:holiday,
+               data = bike.df)
+
+#P-Values Here
+
+summary(fit2)$coefficients[,4]
+
+```
+
+Our p-values suggest first, that relationship between windspeed likely depends on whether the day is holiday and second, that there is no quadratic relationship when the day is holiday. We can plot fitted values to understand more.
+
+
+```{r, fig.dim=c(8, 3)}
+ggplot(bike.df,
+       aes(x = windspeed, y = fitted(fit2), group = holiday, color = holiday))+
+  ggtitle('Plot of Windspeed by Holiday')+
+  xlab('Normalized Windspeed')+
+  ylab("Number of Bikes Rented")+
+  geom_point()+
+  geom_line(lwd =1.25)+
+  scale_color_discrete(name = "Holiday", labels = c("Working", "Holiday"))
+
+
+
+```
+The graph above strongly suggests the relationship between normalized windspeed and number of bikes rented depends on whether it is a Holiday or Working day. When it is a working day, there is strong quadratic relationship. As windspeed increased more people bike, until about 0.4 normalized windspeed, when bikes rented declines. 
+
+When it is holiday, bikes rented slightly increases linearly, but the increase is not very significant. 
+People also bike at higher windspeeds on a working day than a holiday.
+
+## c) III: When Do People Ride?
+### i) Data Exploration/Data Wrangling
+
+
+Before going any further I will do a test-train split
+```{r}
+set.seed(123)
+randomSample <- sample.int(nrow(bike.df), floor(0.8*nrow(bike.df)))
+
+bike_train.df <- bike.df[randomSample,]
+bike_test.df <- bike.df[-c(randomSample), ]
+
+```
+
+
+What we know so far:
+
+* The Autumn season has elevated ridership regardless of weather.
+
+* Normalized windspeed has an effect on number of bikes rented, and this relationship is dependent on whether it is a holiday or not.
+
+I will examine each variable one by one.
+
+Starting with year.
+
+```{r}
+bike_train.df%>%
+  group_by(yr)%>%
+  summarise('Total Rides' = sum(cnt))
+
+```
+
+Year is clearly an important variable, as ridership increased significant from 2011 to 2012.
+
+Examing Weekday:
+```{r weekdayPlots, eval=F}
+
+ggplot(bike_train.df,
+       aes(weekday, cnt))+
+  geom_boxplot()+
+  xlab('Day of Week')+
+  ylab('Number of Bikes Rented')+
+  ggtitle('Bikes Rented By Weekday (Boxplot)')+
+  scale_x_discrete(labels=c("Sunday","Monday","Tuesday","Wednesday", 
+                            "Thursday", "Friday", "Saturday"))
+
+
+bike.df3 <- bike_train.df%>%
+  mutate(weekday = replace(weekday, weekday == 6, 0))
+
+bike.df3$weekday <- as.factor(ifelse(bike.df3$weekday == 0, 'Weekend', 'Weekday'))
+
+ggplot(bike.df3,
+       aes(weekday, cnt))+
+  geom_boxplot()+
+  xlab('Weekday/Weekend')+
+  ylab('Number of Bikes Rented')+
+  ggtitle('Bikes Rented By Weekday (Boxplot)')+
+  scale_x_discrete(labels=c("Weekday","Weekend"))
+
+```
+
+```{r ref.label="weekdayPlots", echo=F, out.width="50%"}
+
+```
+
+
+We don't have  different in ridership over the course of the week,  even between weekday and Weekends.
+
+```{r hourPlot, eval=F}
+bike_train.df$timeGroup <- case_when(between(bike_train.df$hr, 0, 5) ~ "Night",
+                                between(bike_train.df$hr, 6, 9) ~ "Rush_Hour",
+                                between(bike_train.df$hr, 10, 15) ~ "Day",
+                                between(bike_train.df$hr, 16, 19) ~ "Rush_Hour",
+                                between(bike_train.df$hr, 20, 23) ~ "Day")
+ggplot(bike_train.df,
+       aes(x = hr, y = cnt))+
+  geom_point()+
+  geom_smooth()+
+  xlab("Hour of Day")+
+  ylab("Number of Bikes Rented")+
+  ggtitle("Bikes Rented by Hours")+
+  annotate("rect", xmin = 0, xmax = 6,   ymin = -Inf, ymax = Inf, fill = 'blue', alpha = 0.2)+
+  annotate("rect", xmin = 6, xmax = 10,   ymin = -Inf, ymax = Inf, fill = 'red', alpha = 0.2) + 
+  annotate("rect", xmin = 10, xmax = 16,   ymin = -Inf, ymax = Inf, fill = 'green', alpha = 0.2)+
+  annotate("rect", xmin = 16, xmax = 20,   ymin = -Inf, ymax = Inf, fill = 'red', alpha = 0.2)+
+    annotate("rect", xmin = 20, xmax = 23,   ymin = -Inf, ymax = Inf, fill = 'blue', alpha = 0.2)+
+  facet_wrap(~weekday)
+```
+
+```{r ref.label="hourPlot", echo = F}
+
+```
+
+While ridership overall doesn't differ between weekday and weekends, Ridership by hour does. On the weekdays there are large spikes in the rush-hour period (highlighted red). On weekends, rush-hour period have low ridership, bikes rented peaks in the middle of the day (highlighted green) instead. For all days ridership at night (highlighted blue) is low.
+
+I created factor variables Time of Day (Night, Rush-Hour and Day), that should be used for weekdays.
+However on the weekend, these should be not be used and a quadratic hour variable should be used instead.
+
+We know normalized windspeeds relationship with bikes rented is depdendent on whether it is holiday or not, but what about a weekday/weekend
+```{r, fig.dim=c(8,6)}
+
+ggplot(bike_train.df,
+       aes(x = windspeed, y = cnt))+
+  ggtitle('Plot of Windspeed by Weekday/Weekend')+
+  xlab('Normalized Windspeed')+
+  ylab("Number of Bikes Rented")+
+  geom_smooth()+
+  facet_wrap(~weekday)
+
+
+```
+
+No, It does not have the same effect
+
+
+We also need to examine weather.
+```{r, fig.dim=c(8, 3)}
+ggplot(bike_train.df,
+       aes(x = weathersit, y = cnt))+
+  geom_boxplot()+
+  xlab("Weather")+
+  ylab("Number of Bikes Rented")+
+  ggtitle("Ridership By Weather (Boxplot)")+
+  scale_x_discrete(labels=c("Clear","Mist/Cloudy", "Rain/Storm"))
+
+  
+```
+
+There seems to be less ridership on stormy days.
+
+Ridership on holiday
+
+Holiday by itself has minimal effect on number of bikes rented.
+
+**Conclusion on Data Exploration**
+
+What we know:
+
+* Higher ridership in 2011.
+
+* Elevated ridership in autumn, regardless of weather.
+
+* On non-Holiday windspeed has quadratic relationship with count, on holidays its linear
+
+* On weekdays, we have rush-hour peaks and general high during day. On weekends we have a quadratic relationship, which peaks midday. Low ridership at night both weekends and weekdays.
+
+* Low ridership in stormy weather.
+
+
+### ii) Model Building/Model Checking
+
+Apply Data Wrangling to Test set
+```{r}
+bike_test.df$timeGroup <- case_when(between(bike_test.df$hr, 0, 5) ~ "Night",
+                                between(bike_test.df$hr, 6, 9) ~ "Rush_Hour",
+                                between(bike_test.df$hr, 10, 15) ~ "Day",
+                                between(bike_test.df$hr, 16, 19) ~ "Rush_Hour",
+                                between(bike_test.df$hr, 20, 23) ~ "Day")
+```
+
+
+We will build a negative-binomial model to dredge. But first I will do model checking.
+
+```{r, cache = T, out.width="50%"}
+bike_train.df$hr2 <- bike_train.df$hr^2
+bike_test.df$hr2 <- bike_test.df$hr^2
+
+allModel <- glm.nb(cnt ~ yr+ weathersit + season + windspeed + windspeed2 + 
+                          windspeed:holiday +windspeed2:holiday + 
+                            timeGroup:weekday + 
+                           hr:weekday +  hr2:weekday,
+                   data = bike_train.df)
+
+plot(allModel)
+
+```
+
+We have some outliers, 3896, 3481, and 1692. They are present on the cooks plot and the residuals plot.
+
+Lets remove them and dredge our model, the other models checks are all okay.
+
+
+```{r, cache=T}
+bike_train.df <- bike_train.df[-c(3896, 3481, 1692),]
+
+options(na.action = "na.fail")
+allFit <- dredge(allModel, rank = "BIC")
+head(allFit)
+```
+
+We have our best models, to determine the best model, we will select the one with the smallest MSPE
+
+```{r,cache=T}
+first12 <- 12; 
+out = rep(0, first12)
+
+for (i in 1:first12) {
+preds = predict(get.models(allFit, i)[[1]], newdata = bike_test.df, type = "response")
+out[i] = mean((preds - bike_test.df$cnt)^2)
+
+}
+round(out, 2)
+
+```
+The 7th model is the best one. Lets select this as our final and do interpretation
+
+
+```{r}
+bestModel <- get.models(allFit, 7)[[1]]
+summary(bestModel)
+```
+
+### v) Interpretation
+
+We discovered:
+
+* Season is an important variable. More people bike in the Autumn, then Summer, then Winter. Interestingly people bike the least amount in Spring.
+
+* Less people bike as the weather gets worse, this is especially true in rainy/snow/stormy weather.
+
+The most we discovered about is the relationship between hour, weekday and bikes rented.
+Lets plot some fitted models related to hour, our only numeric variable.
+
+```{r}
+
+predCnt <- exp(predict(bestModel, newdata = bike_test.df))
+dataAnalysis <- cbind(bike_test.df, predCnt)
+
+dataAnalysis$weekday <- ifelse(dataAnalysis$weekday == 6 | dataAnalysis$weekday == 0, 'Weekend', 'Weekday')
+
+ggplot(dataAnalysis,
+       aes(x = hr, y = predCnt))+
+  geom_point()+
+  geom_smooth()+
+  facet_wrap(~weekday)
+
+```
+
+The above graph tells us that the model picked up on the relationship between hour, weekday, and bikes rented.
+During the week, bikes rented is elevated at rush-hour. During the weekend it follows a clear quadratic relationship, peaking in the middle of the day.
+
+We also now understand, very few people bike at night, regardless of the day of week.
+

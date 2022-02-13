@@ -1,0 +1,186 @@
+---
+title: "mjon238_assignment2"
+author: "mjon238"
+date: "13/01/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include = F}
+library(tidyr)
+library(tidyverse)
+library(mgcv)
+library(MuMIn)
+library(statmod)
+library(VGAM)
+
+
+#Dataframe for prior withholding period
+eggsdf <- read_csv('eggs.csv')
+eggsNewdf <- read_csv('eggs-new.csv')
+```
+
+
+# Question 1)
+```{r setupQ1}
+#Creating a new variable called rita and adding it to the dataframe
+rita <- ifelse(eggsdf$name == 'rita', 1, 0)
+eggsdf <- cbind(rita, eggsdf)
+```
+
+## a) Creating the box plots
+```{r 1a, fig.height = 4}
+
+boxplot(weight ~ name,
+        data = eggsdf,
+        main="Weight of egg by chicken",
+        xlab="Chicken Names", 
+        ylab="Weight of egg (g)")
+
+
+
+
+```
+
+Rita's egg has most similar weight to Jan's eggs. It also has slightly similar weight to both Evelyn and Ann's, albeit theirs are slightly heavier. Dewi and Freja have heavier eggs than Rita. Barabara and Brook have much lighter eggs than Rita.
+
+## b) Weight Analysis
+
+I would assume weight has no effect on whether the probability the egg is Rita's or not. This is because an increasing weight would more likely be Dewi or Frejas, and a decreasing weight would more likely be Barbara or Brook. A non-linear relationship could exist though. 
+
+I would assume weight and probability an egg is Rita's is unrelated.
+
+
+## c) Model Fitting
+
+To determine whether this model is a good one we will first examine p-values, then compare AIC with the null model and compare deviance with the null model
+
+```{r}
+fitWeight <- glm(rita ~ weight, family = 'binomial', data = eggsdf)
+summary(fitWeight)
+
+```
+
+The corresponding p-value for the weight coefficient is quite large and given this is the only variable this suggests the model does a bad job of determining odds which eggs are Ritas.
+
+We will now fit the null model and make comparisons.
+
+```{r}
+fitNull <- glm(rita ~ 1, family = 'binomial', data = eggsdf)
+
+AIC(fitNull, fitWeight)
+AIC(fitWeight) - AIC(fitNull) 
+```
+
+AIC of the null model is approximately the same as the AIC of the fitted model (difference of less than 2). This tells us both models are similarly supported by the data and the fitted model is NOT better than the null. This reinforces the idea the model is inappropriate.
+
+I will run a deviance comparison to see if the null model (which is a submodel) is more appropriate than the fitted model.
+
+We have a null hypothesis (H0) that the submodel is appropriate.
+```{r}
+anova(fitNull, fitWeight, test = "Chisq")
+
+```
+
+
+Given the high p-value, the H0 is not rejected and therefore the null model is appropriate. This suggests that weight on its own is an unnecessary variable and we have an inappropriate model.
+
+Indicators such as P-Values, AIC and deviance all agree that the weight model is inappropriate.
+
+
+
+# Question 2) 
+
+## a) Model Searching
+
+
+First thing I am going to do is look to see if there are non-linear relationships between my numeric variables. I will do this by fitting GAM plots.
+
+```{r, fig.show="hold", out.width="33%", warning=FALSE}
+
+gam.fit2 <- gam(rita ~ s(width, k=6) + s(length) + s(weight),
+                data = eggsdf,
+                family = 'binomial')
+
+plot(gam.fit2)
+```
+
+There are no non-linear relationships evident as we can draw a straight line through all the dotted lines.
+
+Next I fitted a very complicated model, not with the intention of using it as my final model, but dredging it. Originally, dredging failed, so I cut down the number of interactions in the model using the following formula $rita = weight * width * length + colour + calcium.spots$. I then dredged again, with success. But my AIC was still relatively high. I then decided to do backwards stepwise selection instead.
+
+This led to a lower AIC and a best model with approximately 87 AIC. I have selected this as my best model and will check the randomized quantile residuals. (Note I've hidden the stepwise selection code as it was too long.)
+
+```{r, warning =F}
+complexModel <- glm(rita ~ weight * width * length * colour * calcium.spots,
+               data = eggsdf,
+               family = 'binomial')
+```
+
+
+```{r, include = F}
+bestModel <- step(complexModel, direction = "backward")
+```
+
+```{r, warning=F, out.width="60%"}
+plot(predict(bestModel), qresiduals(bestModel))
+```
+
+The quantile residuals plot looks roughly appropriate. In general there is band around the mean with constant variance. However, there may be some overdispersion. So I will run a beta-binomial regression and check the rho value.
+
+
+```{r, warning=F}
+model2 <- vglm(bestModel$call$formula,
+              family = 'betabinomial',
+              eggsdf)
+plogis(coef(model2)[2])
+```
+
+The rho value is approximately 0.01, this indicates there is no overdispersion and my model is suitable.
+
+A summary of the model is below
+```{r}
+summary(bestModel)
+```
+
+
+
+## b) Predictions
+
+```{r}
+predictedValues <- predict(bestModel, type = "response")
+eggsPredicted <- cbind(predictedValues, eggsdf)
+
+boxplot(predictedValues ~ name, eggsPredicted,
+        ylab = "Probability Egg is Ritas",
+        xlab = "Name of Hen",
+        main = "Predicted Probability an Egg is Ritas Across Hens")
+
+
+```
+The model does a very good job of distinguishing Ann, Barbara, Brook and Dewi's from Rita's. 
+
+It does a slightly worse job of distinguishing between Evelyn, Freja and Jans eggs with Ritas. But still does a good job overall. The average probability that that the model gives these hens eggs to be Ritas is all less than 20%. However, there are some concerning outliers, all visible in the boxplot.
+
+
+
+# Question 3)
+
+## a) Prediction with New Data
+
+```{r}
+decisionProb <- predict(bestModel, newdata = eggsNewdf, type = 'response')
+
+decision.df <- data.frame(decisionProb, eggsNewdf)%>%
+  format(scientific = F)%>%
+  mutate(decision = rank(desc(decisionProb)))%>%
+  mutate(decision = replace(decision, decision>16, NA))%>%
+  select(-decisionProb)
+
+decision.df%>%na.omit%>%arrange(decision)
+write.csv(decision.df, file = "mjon238.csv", row.names = FALSE)
+```
+
+
+

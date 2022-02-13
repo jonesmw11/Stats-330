@@ -1,0 +1,65 @@
+---
+title: "2020-sem-2"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Question 3
+
+## a)
+Total effect of degree on admin
+
+$admin \sim deg + startyr + gender$ With a binomial distribution
+
+We are estimating total effects, so we first need the specified variable (degree), then we need any confounders (gender), then we need to close indirect causal pathways (ignore rank), then we need to include any other direct effects (start yr). All other variables can be ignored (field)
+
+## b)
+
+### i)
+Given there is no interaction can be measured through the difference in coefficients
+
+```{r}
+0.47280- -0.189948
+```
+
+There is a difference of 0.66 in the log odds that an academic gets paid for admin for academics with professional degree relative to those with PHD's.
+
+### ii)
+```{r}
+startyr = 70
+genderM = 0
+degPHD = 0
+degProf = 0
+rankFull = 1
+rankAssoc = 0
+
+beta_0 = -16.833
+beta_3 = 3.676929
+beta_7 =0.310542
+beta_8 = -0.002046
+
+logitP = beta_0 + beta_3 * rankFull + beta_7 * startyr + beta_8 * startyr^2
+
+plogis(logitP)
+```
+
+There is a 19.1% probability that a female full professor with other degree and startyr = 70 receives extra pay for admin duties
+
+### iii)
+The coefficient of gender male suggests that holding all other factors constant male professors have a log-odds of getting paid for admin duties 0.03 lower than females. BUT the p-value is very high and it is highly likely that the confidence interval contains 0. Therefore if we were to examine confidence intervals the model as a whole would most likely suggest male academics are neither less nor more likely to receive extra pay for administrative duties.
+
+
+# c)
+Our P-values and deviance test suggest gender is an important variable and should be included in the model. Also given our causal diagram, it reasonable to assume gender has a significant total causal effect on the probability of academics getting paid for administrative work. The model suggests the log-odds of getting paid for doing administrative work is 0.4282 higher for male academics than for female academics. 
+
+# d)
+
+Our model tells us that gender does play a substantial role in determining probability of getting paid for administrative work. But it is not solely because of gender. It is highly likely that gender effects a wide variety variables such as an academics chosen field, an academics rank, or the age when they first become an academic. And in turn these variables play a significant role in effecting the probability an academic is paid for admin work.
+
+For example women are maybe less likely to have a high rank in their academic profession, and in turn lower ranking academics are less likely to get paid for admin work.
+
+
+

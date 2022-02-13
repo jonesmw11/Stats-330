@@ -1,0 +1,2 @@
+"center" "cramer" "ratio" "PNT"
+55 TRUE 10 17.4459333556238

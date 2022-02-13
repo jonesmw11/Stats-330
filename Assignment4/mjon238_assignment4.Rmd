@@ -1,0 +1,800 @@
+---
+title: "mjon238_assignment4"
+author: "Michael Jones"
+date: "06/02/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+set.seed(123)
+library(readr)
+library(MuMIn)
+library(mgcv)
+library(MASS)
+library(dplyr)
+library(tibble)
+library(pROC)
+library(ggplot2)
+library(tidyverse)
+library(janitor)
+library(VGAM)
+
+```
+
+```{r data, cache=T, include = F}
+bike.df <- read_csv("bike.csv")
+mnist_train.df <- read_csv("mnist-train.csv")
+mnist_test.df <- read_csv("mnist-test.csv")
+```
+*Note to marker: the assignment is a lot shorter than it seems, there is just a lot of code and plots making it seem longer than it is.*
+
+# Question 1)
+
+## a) Switch to Factor
+
+
+The variables season, year, month, holiday, weekday and weathersit are factors variables and need to changed.
+
+```{r, out.width="50%"}
+for (i in c('season', 'yr', 'mnth', 'holiday', 'weekday', 'weathersit')) {
+  
+  bike.df[[paste(i)]] <- factor(bike.df[[paste(i)]])
+  
+}
+
+```
+
+## b) Training-Test Split & (Not) Cross Vailidation
+
+```{r}
+# Split the data
+set.seed(123)
+n = nrow(bike.df)
+
+index = sample(1:n)
+n.test = round(0.2*n, digits = 0) # 20%-80% split
+
+bike_test.df = bike.df[index[1:n.test], ] # test set
+row.names(bike_test.df) = 1:n.test
+
+bike_train.df = bike.df[index[(n.test + 1):n],] # training set
+row.names(bike_train.df) = 1:(n-n.test)
+
+#Total Observations
+n
+```
+
+We use cross-validation when data limited. In this case we have 17379 observations, indicating cross-validation is **not** particularly useful and should be avoided.
+
+
+## c) Full Poisson Regression Model
+
+```{r}
+bike.fit1 <- glm(cnt ~., family = "poisson", data = bike_train.df)
+
+fit1.yhat <- predict(bike.fit1, newdata = bike_test.df)
+
+fit1.mspe <- mean((bike_test.df$cnt - fit1.yhat)^2)
+
+fit1.mspe
+
+
+```
+We get a MSPE of approximately **65666**.
+
+## d) Model Sub-Selection with Dredge
+
+
+```{r, cache= T}
+options(na.action = "na.fail")
+bike.dredge1 <- dredge(bike.fit1, rank = 'BIC')
+
+head(bike.dredge1)
+
+
+```
+
+The best predictive model is the full model in the form (R script): 
+$$Count \sim Holiday + Hour + Month + Season + Weathersit + Weekday + Windspeed + Year$$
+
+
+## e) Root Mean Squared Logarithmic Error
+
+Using the RMSLE Formula: $$RMSLE = \sqrt {\frac{1}{n.test}\sum_{i=1}^{n.test}(ln(p_i + 1))-(ln(a_i + 1))^2} $$
+
+where $p_i$ is predicted value, $a_i$ is the actual value
+
+```{r}
+bestModels <- lapply(1:3, function(x) {
+  
+  get.models(bike.dredge1, subset = x)[[1]]
+  
+})
+names(bestModels) <- c('model1', 'model2', 'model3')
+
+
+n.test <- nrow(bike_test.df)
+
+RMSLE <- numeric(3)
+
+for(i in 1:3){
+  p_i <- predict(bestModels[[paste0('model', i)]], newdata = bike_test.df)
+  a_i <- bike_test.df$cnt
+  RMSLE[i] <- sqrt((1/n.test)*sum(((log(p_i+1))-log(a_i+1))^2))
+}
+names(RMSLE) <- c('model1', 'model2', 'model3')
+
+RMSLE
+```
+
+Model fit 3 has the lowest RMSLE value, with the formula (R Script): 
+$$Count \sim Holiday + Hour + Month + Season + Weathersit + Windspeed + Year$$
+
+
+
+
+## f) Gam Plots & Quadratic Dredge
+
+```{r gamPlot,eval=F}
+
+bestModel <- bestModels$model3
+
+gamModel <- gam(cnt ~ holiday + s(hr) + mnth + season + weathersit + s(windspeed) + yr, 
+                family = "poisson", data = bike_train.df)
+
+plot(gamModel, select = 1)
+plot(gamModel, select = 2, ylim = c(-0.4,0.1))
+
+
+```
+
+
+```{r ref.label="gamPlot", echo=F, out.width="50%"}
+
+```
+
+Adding a quadratic term is likely to lead to overfitting, because it is more likely to detect white noise in the data than a linear term.
+
+```{r, cache = T}
+
+allModel <- glm(cnt ~ holiday + hr + I(hr^2) + mnth + season +
+                  weathersit + windspeed + I(windspeed^2) + yr, 
+                family = "poisson", 
+                data = bike_train.df)
+
+options(na.action = "na.fail")
+dredgeQuadratic <- dredge(allModel, rank = "BIC")
+
+head(dredgeQuadratic)
+
+```
+
+
+
+## g) Root Mean Squared Logarithmic Error For Quadratic Models
+
+```{r}
+RMSLE2 <- numeric(6)
+
+bestQuadModels <- lapply(1:6, function(x){
+  
+  get.models(dredgeQuadratic, subset = x)[[1]]
+  
+})
+names(bestQuadModels) <- c('model1', 'model2', 'model3', 'model4', 'model5', 'model6')
+
+for(i in 1:6){
+  p_i <- predict(bestQuadModels[[paste0('model', i)]], newdata = bike_test.df)
+  a_i <- bike_test.df$cnt
+  RMSLE2[i] <- sqrt((1/n.test)*sum(((log(p_i+1))-log(a_i+1))^2))
+}
+names(RMSLE2) <- c('model1', 'model2', 'model3', 'model4', 'model5', 'model6')
+
+RMSLE2
+```
+The 5th Model has the lowest RMSLE (3.0978). The R script formula being: $$Count \sim  Hour + I(Hour^2) + Month + Season + Weathersit + Windspeed + I(Windspeed^2) + Year$$
+
+
+## h) Overdispersion Check
+
+```{r}
+#Deviance
+bestQuadModels$model5$deviance
+
+#Degrees of Freedom
+bestQuadModels$model5$df.residual
+
+#Ratio
+bestQuadModels$model5$deviance/bestQuadModels$model5$df.residual
+```
+The residual deviance is very, very high relative to the degrees of freedoms. The ratio is 64.8,  which indicates **very severe overdispersion**.
+
+There are two models to deal with over-dispersion, the quasi-poisson and a negative-binomial. We can not use the quasi-poisson model for prediction because it does not have a log-likelihood function and thus no information criterion (AIC, AICc, BIC). This makes model-section difficult. Therefore, we should use a negative-binomial distribution.
+
+
+**Negative Binomial RMSLE:**
+```{r}
+
+negBinFit <- glm.nb(cnt ~ holiday + hr + I(hr^2) + mnth + weathersit + yr,
+                      data = bike_train.df)
+
+p_i <- predict(negBinFit, newdata = bike_test.df)
+a_i <- bike_test.df$cnt
+RMSLE3 <- sqrt((1/n.test)*sum(((log(p_i+1))-log(a_i+1))^2))
+
+RMSLE3
+
+```
+The RMSLE for the negative binomial model is approximately 3.095.
+
+
+```{r}
+RMSLE3 <= RMSLE2
+```
+This is smaller than our best quadratic Poisson models.
+
+```{r}
+RMSLE3 <= RMSLE
+```
+But it is not smaller than our non-quadratic RMSLE's from part e.
+
+However, given the models from part e have overdispersion, we will select the negative binomial as our final.
+
+## i) Prediction with Final Model
+
+```{r}
+finalFit <- negBinFit
+
+newdata <- data.frame('season' = 2,
+                      'yr' = 0,
+                      'mnth' = 5,
+                      'hr' = 7,
+                      'holiday' = 0,
+                      'weekday' = 1,
+                      'weathersit' = 1,
+                      'windspeed' = 0.2537)
+
+for (i in c('season', 'yr', 'mnth', 'holiday', 'weekday', 'weathersit')) {
+  newdata[[paste(i)]] <- factor(newdata[[paste(i)]])
+  
+}
+
+
+pred <- round(exp(predict(finalFit, newdata = newdata)))
+paste(pred, 'Rental Bikes')
+```
+
+Based on the final model, we predict that between 7am and 8am on a Working Monday May Summer Day in 2011 and given a normalized windspeed of 0.2537, there will be 138 bikes rented.
+
+
+# Question 2)
+
+## a) Renaming Columns
+```{r}
+mnist_test.df[,1] <- ifelse(mnist_test.df[,1] == 7, 1, 0)
+names(mnist_test.df)[1] <- 'Y'
+
+mnist_train.df[,1] <- ifelse(mnist_train.df[,1] == 7, 1, 0)
+names(mnist_train.df)[1] <- 'Y'
+
+
+```
+
+
+## b) Model Constructing
+
+```{r, cache = T}
+index.predictors = seq(15 * 28 + 1, length.out = 28, by = 1)
+
+predictors.ch = names(mnist_train.df)[index.predictors]
+
+#The code given fails, so I just did my own based on the columns given
+mnist28.glm = glm(Y ~ `0...421` + `0...422` + `0...423` + `0...424` + 
+                    `0...425` + `0...426` + `0...427` + `0...428` + 
+                    `0...429` + `0...430`+ `0...431` + `0...432` + 
+                    `0...433` + `0...434` + `0...435` + `45` + 
+                    `186` + `253...438` + `253...439` + `150` +  
+                     `27` + `0...442` + `0...443` + `0...444` +  
+                    `0...445` + `0...446` + `0...447` + `0...448`, 
+                  family = binomial, data = mnist_train.df)
+
+
+actualY <- mnist_train.df$Y
+predictY0.5 <- ifelse(fitted.values(mnist28.glm) <= 0.5, 0, 1)
+
+#Output Confusion Matrix
+confusMatrix <- table(Actual = actualY, Predicted = predictY0.5)
+confusMatrix
+```
+
+
+## c) Esimated Prediction Error
+
+Given $Pred.Error = \frac {FP + FN}{TP+TN+FP+FN}$
+
+```{r}
+(confusMatrix[1,2] + confusMatrix[2,1])/sum(confusMatrix)
+```
+
+Our estimated prediction error is approximately 0.093.
+
+## d) Estimated Sensitivity
+Given $Sensitivity = \frac {TP}{TP+FN}$
+
+```{r}
+confusMatrix[2,2]/sum(confusMatrix[2,])
+```
+
+Our estimated sensitivity is approximately 0.308.
+
+
+
+## e) Estimated Specificity
+Given $Specificity = \frac {TN}{TN+FP}$
+
+```{r}
+confusMatrix[1,1]/sum(confusMatrix[1,])
+```
+
+Our estimated specificity is approximately 0.977.
+
+## f) Specificity/Sensitivity Plot
+
+```{r, cache=T}
+n.plot = 100
+c.vec = seq(0.01, 0.8, length.out = n.plot)
+
+sensitivityData <- numeric(n.plot)
+specificityData <- numeric(n.plot)
+for(i in 1:100) {
+  predictY <- ifelse(fitted.values(mnist28.glm) <= c.vec[i], 0, 1)
+  confusMatrix2 <- table(Actual = actualY, Predicted = predictY)
+  sensitivityData[i] <- confusMatrix2[2,2]/sum(confusMatrix2[2,])
+  specificityData[i] <- confusMatrix2[1,1]/sum(confusMatrix2[1,])
+
+}
+```
+
+```{r, fig.width=5, fig.height=5}
+
+plot(c.vec, sensitivityData, type = 'l', lwd=2.5, col = 'blue',
+     main = 'Sensitivity/Specificity Tradeoff',
+     xlab = 'Cutoff Point c',
+     ylab = 'Sensitivity/Specificity')
+lines(c.vec, specificityData, type = 'l', col = 'red', lwd=2.5)
+legend(0.1,0.3, legend=c("Sensitivity", "Specificity"),
+       col=c("blue", "red"), lty=c(1,1))
+
+
+```
+
+
+## g) ROC Plots
+
+```{r, fig.height=5, fig.width=5}
+
+
+rocPlot <- roc(response = mnist_train.df$Y,
+              predictor = fitted.values(mnist28.glm))
+
+plot(rocPlot, col = "blue", grid = TRUE, lwd=2.5, main = "ROC Plot 1")
+
+
+```
+
+##  h) Area under ROC Curve
+
+The area under the ROC curve is called AUC (Area Under Curve) and its area pesents our models predictive ability.
+
+
+## i) Max Specificity/Sensitivty
+
+```{r, fig.height=5, fig.width=5}
+
+
+plot(rocPlot, col = "blue", grid = TRUE, lwd=2.5, main = "ROC Plot 2",
+     print.thres = "best")
+
+
+```
+
+The above plot shows the optimal cut-off point (given we wish to maximize the sum of sensitivity and specificity) is 0.116.
+
+## j) Maximizing the Minimum of Sensitivty and Specificity
+
+```{r, fig.height=5, fig.width=5}
+
+ind2 <- with(rocPlot, which.min(abs(sensitivities - specificities)))
+
+plot(rocPlot, col = "blue", grid = TRUE, lwd=2.5, main = "ROC Plot 3")
+abline(v = 1-rocPlot$thresholds[ind2], col = 'black', lwd = 2.5)
+text(0.7,0.7,"C = 0.135",srt=0.2,pos=3)
+
+
+```
+
+The cut-off value that maximizes the minimum of sensitivity and specificity is 0.135.
+
+
+# Question 3)
+
+## a) Explanatory Data Analysis
+
+### Q1: What seasons of the year are most rides taken on? 
+
+```{r}
+#First Question
+bike.df%>%
+  group_by(season)%>%
+  summarise("Total Bikes Rented" = sum(cnt))
+```
+
+Most rides are taken in the the season == 3,  which is Fall (Autumn), with 1,061,129	bikes rented.
+
+Before examining the next question, I will remove the weather sit 4 as it is a typo.
+
+```{r}
+bike.df <- bike.df[!bike.df$weathersit == '4',]
+bike_train.df <- bike_train.df[!bike_train.df$weathersit == '4',]
+bike_test.df <- bike_test.df[!bike_test.df$weathersit == '4',]
+
+```
+
+
+### Q2: Is the difference mainly due to the different weather conditions between seasons?
+
+```{r, fig.dim = c(7, 3)}
+
+weather_names <- list(
+  "Clear",
+  "Mist/Cloudy",
+  "Snow/Rain/Storm"
+)
+weather_labeller <- function(variable,value){
+  return(weather_names[value])
+}
+
+ggplot(bike.df,
+       aes(season, cnt))+
+  geom_boxplot()+
+  facet_grid(~weathersit, labeller=weather_labeller) +
+  xlab('Season')+
+  ylab('Number of Bikes Rented')+
+  ggtitle('Bikes Rented By Season & Weather (Boxplot)')+
+  scale_x_discrete(labels=c("Spring","Summer", "Autumn", "Winter"))
+
+
+```
+
+No, this difference is not due to the weather. In the plot above we see we have higher numbers of bikes rented in Autumn regardless of the weather.
+
+## b) Using GLM's to Answer II
+### Q1: How are wind speed and the number of bike rentals related? 
+
+We can answer this question by fitting a GLM with the formula $log(\mu_i) = \beta_0 + \beta_1\times WindSpeed_i$
+
+Where $\mu_i$ is the number of bikes rented.
+But before that I'll check for non-linear relationships using GAM.
+
+```{r, cache = T, fig.dim = c(8, 3.5)}
+fit1 <- mgcv::gam(cnt ~ s(windspeed), data = bike.df, family = "poisson")
+plot(fit1, xlab = "Normalized Windspeed", main = "GAM Plot for Windspeed")
+abline(v = 0.4)
+
+```
+
+The GAM plot indicates a clear non-linear relationship between normalized windspeed and number of bikes rented.
+
+I should fit a GLM with a quadratic term.
+
+I did this with a Poisson distribution, but residual deviance was incredibly high, suggesting overdispersion. I will fit a negative binomial model instead.
+```{r}
+bike.df$windspeed2 <- bike.df$windspeed^2
+
+#Poisson Fit
+poissonFit1 <- glm(cnt~ windspeed + windspeed2, data = bike.df, family  = 'poisson')
+#Incredibly Large Deviance
+summary(poissonFit1)$deviance
+
+#Negative Binomial Instead
+fit1 <- glm.nb(cnt ~ windspeed + windspeed2, data = bike.df)
+
+#Deviance much improved
+summary(fit1)$deviance
+
+#P-Values HERE
+summary(fit1)$coefficients[,4]
+```
+
+The respective p-values confirm what was suggested by the GAM plots. Windspeed and Number of bikes rented have a significant non-linear relationship. The GAM plot indicated initially as Normalized windspeed increases, more people rent bikes, but as it increases past approximatley 0.4, bikes rented declines.
+
+*Note: I only printed p-values to avoid complicating my output.*
+
+### Q2: Is this relationship the same for a holiday and a working day.
+
+We can fit the following model to study this question 
+$$log(\mu_i) = \beta_0 + \beta_1\times Windspeed_i + \beta_2\times Windspeed_i^2 + \beta_3\times Windspeed_i\times Holiday_i + \beta_4\times Windspeed_i^2 \times Holiday_i$$
+
+```{r}
+
+fit2 <- glm.nb(cnt ~ windspeed + windspeed2 + windspeed:holiday + windspeed2:holiday,
+               data = bike.df)
+
+#P-Values Here
+
+summary(fit2)$coefficients[,4]
+
+```
+
+Our p-values suggest first, that relationship between windspeed likely depends on whether the day is holiday and second, that there is no quadratic relationship when the day is holiday. We can plot fitted values to understand more.
+
+
+```{r, fig.dim=c(8, 3)}
+ggplot(bike.df,
+       aes(x = windspeed, y = fitted(fit2), group = holiday, color = holiday))+
+  ggtitle('Plot of Windspeed by Holiday')+
+  xlab('Normalized Windspeed')+
+  ylab("Number of Bikes Rented")+
+  geom_point()+
+  geom_line(lwd =1.25)+
+  scale_color_discrete(name = "Holiday", labels = c("Working", "Holiday"))
+
+
+
+```
+The graph above strongly suggests the relationship between normalized windspeed and number of bikes rented depends on whether it is a Holiday or Working day. When it is a working day, there is strong quadratic relationship. As windspeed increased more people bike, until about 0.4 normalized windspeed, when bikes rented declines. 
+
+When it is holiday, bikes rented slightly increases linearly, but the increase is not very significant. 
+People also bike at higher windspeeds on a working day than a holiday.
+
+## c) III: When Do People Ride?
+### i) Data Exploration/Data Wrangling
+
+
+What we know so far:
+
+* The Autumn season has elevated ridership regardless of weather.
+
+* Normalized windspeed has an effect on number of bikes rented, and this relationship is dependent on whether it is a holiday or not.
+
+I will examine each variable one by one.
+
+Starting with year.
+
+```{r}
+bike_train.df%>%
+  group_by(yr)%>%
+  summarise('Total Rides' = sum(cnt))
+
+```
+
+Year is clearly an important variable, as ridership increased significantlu from 2011 to 2012.
+
+I will examine weekday now:
+```{r weekdayPlots, eval=F}
+
+ggplot(bike_train.df,
+       aes(weekday, cnt))+
+  geom_boxplot()+
+  xlab('Day of Week')+
+  ylab('Number of Bikes Rented')+
+  ggtitle('Bikes Rented By Weekday (Boxplot)')+
+  scale_x_discrete(labels=c("Sunday","Monday","Tuesday","Wednesday", 
+                            "Thursday", "Friday", "Saturday"))
+
+
+bike.df3 <- bike_train.df%>%
+  mutate(weekday = replace(weekday, weekday == 6, 0))
+
+bike.df3$weekday <- as.factor(ifelse(bike.df3$weekday == 0, 'Weekend', 'Weekday'))
+
+ggplot(bike.df3,
+       aes(weekday, cnt))+
+  geom_boxplot()+
+  xlab('Weekday/Weekend')+
+  ylab('Number of Bikes Rented')+
+  ggtitle('Bikes Rented By Weekday (Boxplot)')+
+  scale_x_discrete(labels=c("Weekday","Weekend"))
+
+```
+
+```{r ref.label="weekdayPlots", echo=F, out.width="50%"}
+
+```
+
+
+We don't have a difference in ridership over the course of the week, even between weekdays and weekends.
+
+However, people may rent bikes at different hours depending on the day of week. I will check this now.
+
+```{r hourPlot, eval=F}
+ggplot(bike_train.df,
+       aes(x = hr, y = cnt))+
+  geom_point()+
+  geom_smooth()+
+  xlab("Hour of Day")+
+  ylab("Number of Bikes Rented")+
+  ggtitle("Bikes Rented by Hour Across Day of Week")+
+  annotate("rect", xmin = 0, xmax = 6,   ymin = -Inf, ymax = Inf, fill = 'blue', alpha = 0.2)+
+  annotate("rect", xmin = 6, xmax = 10,   ymin = -Inf, ymax = Inf, fill = 'red', alpha = 0.2) + 
+  annotate("rect", xmin = 10, xmax = 16,   ymin = -Inf, ymax = Inf, fill = 'green', alpha = 0.2)+
+  annotate("rect", xmin = 16, xmax = 20,   ymin = -Inf, ymax = Inf, fill = 'red', alpha = 0.2)+
+    annotate("rect", xmin = 20, xmax = 23,   ymin = -Inf, ymax = Inf, fill = 'blue', alpha = 0.2)+
+  facet_wrap(~weekday)
+```
+
+```{r ref.label="hourPlot", echo = F}
+
+```
+
+*Note Days 0 and 6 are weekends, others are weekdays*
+
+While ridership overall doesn't differ between weekday and weekends, Ridership by hour does. On the weekdays there are large spikes in the rush-hour period (highlighted red). On weekends, rush-hour period have low ridership, bikes rented peaks in the middle of the day (highlighted green) instead. For all days ridership at night (highlighted blue) is low.
+
+I created factor variables Time of Day (Night, Rush-Hour and Day), that should be used for weekdays. However on the weekend, these should be not be used and a quadratic hour variable should be used instead.
+
+```{r}
+bike_train.df$timeGroup <- case_when(between(bike_train.df$hr, 0, 5) ~ "Night",
+                                between(bike_train.df$hr, 6, 9) ~ "Rush_Hour",
+                                between(bike_train.df$hr, 10, 15) ~ "Day",
+                                between(bike_train.df$hr, 16, 19) ~ "Rush_Hour",
+                                between(bike_train.df$hr, 20, 23) ~ "Day")
+
+bike_test.df$timeGroup <- case_when(between(bike_test.df$hr, 0, 5) ~ "Night",
+                                between(bike_test.df$hr, 6, 9) ~ "Rush_Hour",
+                                between(bike_test.df$hr, 10, 15) ~ "Day",
+                                between(bike_test.df$hr, 16, 19) ~ "Rush_Hour",
+                                between(bike_test.df$hr, 20, 23) ~ "Day")
+
+
+```
+
+
+We also need to examine weather and holiday.
+```{r weatherHolidayPlot, eval = F}
+ggplot(bike_train.df,
+       aes(x = weathersit, y = cnt))+
+  geom_boxplot()+
+  xlab("Weather")+
+  ylab("Number of Bikes Rented")+
+  ggtitle("Ridership By Weather (Boxplot)")+
+  scale_x_discrete(labels=c("Clear","Mist/Cloudy", "Rain/Storm"))
+
+
+ggplot(bike_train.df,
+       aes(x = holiday, y=cnt))+
+  geom_boxplot()+
+  xlab("Holiday or Working Day")+
+  ylab("Number of Bikes Rented")+
+  ggtitle("Ridsership by Holiday")+
+  scale_x_discrete(labels = c("Working Day", "Holiday"))
+```
+
+```{r ref.label="weatherHolidayPlot", echo = F, out.width = "50%"}
+
+```
+
+There seems to be less ridership on stormy days and on Holidays.
+
+**Conclusion on Data Exploration**
+
+What we know:
+
+* Higher ridership in 2011.
+
+* Elevated ridership in autumn, regardless of weather.
+
+* On non-Holiday windspeed has quadratic relationship with count, on holidays its linear
+
+* On weekdays, we have rush-hour peaks and general high during day. On weekends we have a quadratic relationship, which peaks midday. Low ridership at night both weekends and weekdays.
+
+* Low ridership in stormy weather.
+
+* Low ridership on Holidays
+
+
+### ii) Model Building/Model Checking
+
+We will build a negative-binomial model to dredge. But first I will do model checking.
+
+Why I chose this model?
+
+* Year, Weather, Holiday, and Season were all show to impact bikes rented in our data exploration.
+
+* Windspeed was linear during holidays and non-linear during non-holidays (hence the quadratic interaction). 
+
+* Ridership by the hour was non-linear, but on weekdays, ridership needed elevation during rushhour. So I added interactions to weekday with timegroup (includes rushhour), hr, and quadratic hour. 
+
+```{r, cache = T, out.width="50%"}
+bike_train.df$hr2 <- bike_train.df$hr^2
+bike_test.df$hr2 <- bike_test.df$hr^2
+
+bike_train.df$windspeed2 <- bike_train.df$windspeed^2
+bike_test.df$windspeed2 <- bike_test.df$windspeed^2
+
+
+allModel <- glm.nb(cnt ~ yr+ weathersit + holiday + season + 
+                          windspeed + windspeed2:holiday + 
+                            timeGroup:weekday + 
+                           hr:weekday +  hr2:weekday,
+                   data = bike_train.df)
+
+plot(allModel)
+
+```
+
+We have some outliers, observations 8000, 11294, 7674. They are present on the cooks plot and the residuals plot.
+
+Lets remove them and dredge our model, the other models checks are all okay.
+
+
+```{r, cache=T}
+bike_train.df <- bike_train.df[-c(8000, 11294, 7674),]
+
+options(na.action = "na.fail")
+allFit <- dredge(allModel, rank = "BIC")
+head(allFit)
+```
+
+We have our best models, to determine the best model, we will select the one with the smallest MSPE
+
+```{r,cache=T}
+first12 <- 12; 
+out = rep(0, first12)
+
+for (i in 1:first12) {
+preds = predict(get.models(allFit, i)[[1]], newdata = bike_test.df, type = "response")
+out[i] = mean((preds - bike_test.df$cnt)^2)
+
+}
+round(out, 2)
+```
+The 1st model is the best one. Lets select this as our final and do interpretation
+
+
+```{r}
+bestModel <- get.models(allFit, 1)[[1]]
+summary(bestModel)
+```
+
+### v) Interpretation
+
+We discovered:
+
+* More people rented bikes in 2012.
+
+* Season is an important variable. More people bike in the Autumn, then Summer, then Winter. Interestingly people bike the least amount in Spring.
+
+* More people bike as it goes windier (intuitively this will be to a certain extent)
+
+* Less people bike as the weather gets worse, this is especially true in rainy/snow/stormy weather.
+
+The most we discovered about is the relationship between hour, weekday and bikes rented.
+Lets plot some fitted models related to hour, our only numeric variable.
+
+```{r, fig.dim=c(8, 4)}
+
+predCnt <- exp(predict(bestModel, newdata = bike_test.df))
+dataAnalysis <- cbind(bike_test.df, predCnt)
+
+dataAnalysis$weekday <- ifelse(dataAnalysis$weekday == 6 | dataAnalysis$weekday == 0,
+                               'Weekend', 'Weekday')
+
+ggplot(dataAnalysis,
+       aes(x = hr, y = predCnt))+
+  geom_point()+
+  geom_smooth()+
+  facet_wrap(~weekday)
+
+```
+
+The above graph tells us that the model picked up on the relationship between hour, weekday, and bikes rented.
+
+
+During the week, bikes rented is elevated at rush-hour. During the weekend it follows a clear quadratic relationship, peaking in the middle of the day.
+
+We also now understand, very few people bike at night, regardless of the day of week.
+

@@ -1,0 +1,302 @@
+---
+title: "2019_sem_1_past_exam"
+author: "Michael Jones"
+date: "12/02/2022"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+R
+
+# Question 1)
+
+## a) 
+
+### i)
+
+$$logit(p_i) = \beta_0 + \beta_1\times duration_i + \beta_2\times ageB_i + \beta_3\times ageC_i + \beta_4\times own.houseYes_i$$
+
+$$Y_i \sim Binomial(n_i, p_i)$$
+Where $Y_i$ is the number of customers who defaulted on their loan from the ith group. $n_i$ is the number of customers in the ith group
+And $p_i$ refers to the probability of a customer defaulting on their loan
+
+$ageB$ is a dummy variable. It takes value 1 for groups between the ages 30 and 50, 0 otherwise.
+
+$ageC$ is a dummy variable. It takes value 1 for groups older than 50, 0 otherwise
+
+$duration$ refers to the duration of the loan in months
+
+$own.houseYes$ is a Dummy variable, that takes the value 1 if the group owns their house, 0 otherwise.
+
+### i)
+$Y_i \sim Binomial(n_i, p_i)$
+Our response variable is assumed to have a binomial distribution.
+
+## b)
+Holding all other variables constant, a one month increase in duration of the loan will increase the odds that a customer defaults on their loan by between 1.026 and 1.051 times
+
+```{r}
+(exp(c(0.026, 0.050)))
+```
+
+
+## c)
+The deviance does NOT suggest the model does not fit the data.
+We have done a hypothesis test with the H0 the model is appropriate. Given a p-value of 0.29, we do NOT reject the Null. The model is appropriate.
+
+## d)
+The GAM plot of duration is approximately linear (we can fit a straight line between the dotted line). We do not need to add polynomial terms to the models.
+
+## e)
+Model A is more appropriate. My preference is not very strong, as they models have approximately identical AICc. I prefer Model A because we should avoid over-complicating the model if it doesn't substantially increase predictive ability. Furthermore the extra variable (duration^2) has a high p-value.
+
+## f)
+
+### i) 
+The deviance of model E is 0
+
+### ii)
+Null deviance is 95.764
+
+### iii)
+Saturated Model (E) Log Likelihood: $\ell_s = -42.182$
+
+Deviance Model B: $D_B = 25.261$
+
+$D_B = 2(\ell_s - \ell_B)$
+
+$25.261 = 2(-42.182 - \ell_B)$
+
+$12.6305 = -42.182 - \ell_B$
+
+$54.8125 = - \ell_B$
+
+$\ell_B = -54.8125$
+```{r}
+12.6305+42.182
+```
+
+
+The Maximized log likelihood of model B is -92.704
+
+
+## g)
+H0: The submodel (null Model) is appropriate. All our explanatory variables loan, age house, ownership are unrelated to probability a customer defaults their loan.
+
+## h)
+H1: The submodel (null model) is not appropriate. At least one of our explanatory terms are related to our response variable.
+
+## i and j)
+
+```{r}
+diffInDeviance <- 95.765-28.366
+df <- 29-25
+1-pchisq(diffInDeviance, df)
+
+```
+We reject the null hypothesis, the submodel is not appropriate and at least one of our explanatory terms (duration, age, own.house) are necessary variables.
+
+# Question 2)
+
+## a:d) Skip didn't study this
+
+
+# Question 3)
+
+## a)
+A histogram of X shows a right skew.
+
+## b)
+lm(log(y) ~ log(x), data = data)
+
+## c)
+```{r}
+
+beta_0 = -0.453
+beta_1 = 0.0163
+xfit=2
+yfit=3
+
+ypred = exp(beta_0  + beta_1*log(xfit))
+
+ypred
+
+```
+The fitted value is 0.64
+
+## d)
+$log(y) = \beta_0 + \beta_1\times log(x)$
+
+If x is tripled: $log(y) = \beta_0 + \beta_1\times log(3x)$
+
+$log(y) = \beta_0 + \beta_1\times (log(3) + log(x))$
+
+$log(y) = \beta_0 + \beta_1\times log(x) + \beta_1\times log(3)$
+
+$y = exp(\beta_0) \times exp(\beta_1\times log(x)) \times exp(\beta_1\times log(3))$
+
+$y = exp(\beta_0) \times exp(\beta_1\times log(x)) \times exp(log(3))^{\beta_1}$
+
+$y = exp(\beta_0) \times exp(\beta_1\times log(x)) \times 3^{\beta_1}$
+
+
+Thus Y gets multiplied by $3^{\beta_1}$
+
+which is appromximatley
+```{r}
+
+3^beta_1
+```
+
+
+# Question 4)
+
+## a)
+An explanatory model is a model testing causual theory
+
+## b)
+A predictive model is a model whose primary purpose is to determine future observations.
+
+## c)
+Measurement errors reduce the predictive power of a model.
+
+# Question 5)
+
+## a)
+
+$log(y) = \beta_0 + \beta_1\times x$
+
+$\log(70) - \beta_0 = \beta_1 \times x$
+$\frac{log(70) - \beta_0}{\beta_1} = x$
+
+```{r}
+
+beta_0 = 4.270399
+beta_1 = -0.000478
+
+x = (log(70) - beta_0)/beta_1
+x
+
+
+```
+
+## b)
+```{r, eval = F}
+set.seed(123)
+n = nrow(eurof)
+n.sims = 1000
+xActual = 45.81
+
+for (i in n.sims) {
+  samp <- sample(1:nrow(eurof), replace = T)
+  boot.df <- eurof[samp,]
+  
+  fit <- lm(pulse ~age, family = 'poisson', data = boot.df)
+  
+  est.b0 = coef(fit)[1]
+  est.b1 = coef(fit)[2]
+  xsim[i] = (log(70) - est.b0)/est.b1
+ 
+    
+}
+
+c(2*xActual - quantile(xsim, probs = 0.975), 
+  2*xActual - quantile(xsim, probs = 0.025))
+```
+
+
+# Question 6)
+
+$$logit(p_i) = \beta_0 + \beta_1\times x2_i  + f_1(x3_i) + \beta_2\times x4_i + \beta_3 \times (x4^2_i)$$
+
+$p_i$ refers to the probability that y01 takes the value 1.
+$beta_i$ reflect linear relationships
+$f_i$ are the smoothing functions of GAM
+
+# Question 7)
+Test set is data that we do NOT use for model training. We use test set to gain an honest estimate of the mean squared prediction error (MSPE)
+
+# Question 8)
+
+## a)
+```{r}
+X2 = 40
+X3 = 6.5
+
+beta_1 = -6
+beta_2 = 0.03
+beta_3 = 0.5
+
+logitY = beta_1 + beta_2*X2 + beta_3*X3
+
+y = plogis(logitY)
+y
+
+```
+
+
+
+
+There is a 17.5% chance they get an A
+
+## b)
+
+
+$logit(0.5) = beta_1 + beta_2\times X2 +  \beta_3\times 6.5$
+
+$0 - beta_1 - beta_3\times 6.5 = \beta_2\times X2$
+
+$\frac {- beta_1 - beta_3\times 6.5}{\beta_2} = X2$
+```{r}
+
+X2 = (-beta_1 - beta_3*6.5)/beta_2
+X2
+
+```
+
+They would have to study for approximately 91.7 hours.
+
+# Question 9) REGSUBSETS (Didnt Study this)
+
+---
+
+
+# Question 10)
+
+## a)
+We say that M is a modifier of the effect of X on Y when the average causal effect of X on Y varies across levels of M. We handle them by allowing interactions in statistical models.
+
+## b)
+Design Experiments and causal analysis of observational data
+
+## c)
+```{r, eval = F}
+
+fit <- glm(y ~ A + B, family = 'poisson', data = data)
+
+
+```
+
+
+## d)
+
+```{r, eval = F}
+
+fit <- glm(B ~ A, family = 'poisson', data = data)
+
+```
+
+## e)
+
+```{r, eval = F}
+
+fit <- glm(y ~ A, family = 'poisson', data = data)
+
+```
+

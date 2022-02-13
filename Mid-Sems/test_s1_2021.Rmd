@@ -1,0 +1,186 @@
+---
+title: "test_s1_2021"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 1)
+
+For the 75 minute duration of this test, I confirm that I will not discuss the
+content of the test with anyone else. I will not give any assistance to another
+student taking this test. I will not receive any assistance from any person or
+tutoring service.
+
+
+## Question 2)
+# a) 
+
+$log(death_i) = \beta_0 + \beta_1 \times Gender_i + \beta_2 \times Day_i +\beta_3 \times Gender_i \times Day_i + log(person.days_i)$
+
+where $Gender_i$ refers to the gender of the victim, 1 if Male, 0 if female
+AND $Day_i$ is the Friday date for the ith day, 1 if the day is NOT Friday the 13th, 0 if Friday the 13th
+$person.days_i$ is the total number of person-days over which the deaths occurred for the ith group
+
+# b) 
+
+Person.days is an offset. It is essentially transforming the response variable into 
+
+$log(\frac {death_i}{person.days_i})$
+
+So we have logged expected number of deaths per person.days as our response.
+
+
+# c)
+i)
+
+In the model our baseline is Female and Friday
+
+i) let dayOtherFri = 0, genderMale = 1
+
+```{r}
+exp(0.7725)
+
+
+```
+
+On a Friday 13th the death rate for males is about 2.165 times that for females
+
+ii) Let Male = 0, Other Fri = 1
+
+```{r}
+(100*(exp(-0.4789)-1))
+
+```
+
+For females, the death rate for other Fridays is about 62% percent of the death
+rate for Friday 13th.
+
+
+# d)
+The deviance of the Fri13.fit is 0 because it is the saturated model. We know this because this data set has 4 observations and the model has 4 parameters
+
+#e) 
+
+Day does not have the same effect for male and female. For females we see the death rate for other Fridays is about 62% percent of the death rate for Friday the 13th
+
+In males we see the rate for other Fridays is about 95% of the death rate for Friday the 13th (calculations below). The effect is the addition of the $\beta_1  + \beta_2$
+
+This difference is evident in the use of the interaction term: GenderMale:DayOtherFri
+```{r}
+
+100+(100*(exp(-0.4789+0.4282)-1))
+```
+
+
+## Question 3)
+
+# a)
+
+i) Variance for Poisson.fit using formula $Var(Y_4) = 30.32639  =\mu_4$
+
+
+ii) For quasi-poisson $Var(Y_4) =k \times \mu_4 = 20.63818 \times 30.32639$
+
+Variance is equal to 625.888 (Calc Below)
+
+```{r}
+
+20.63818*30.32639
+```
+iii) for Negative Binomial
+
+
+$Var(Y_4) = \mu_4 + \frac {\mu_4^2}{\theta}$
+
+```{r}
+mu4 <- 25.69835
+theta <- (5.7626)
+
+varianceNegBin <- mu4 + ((mu4^2)/theta)
+varianceNegBin
+
+```
+variance is equal to 140.3
+
+
+
+# b)
+
+i)
+
+Poisson first
+```{r}
+observed <- 19 
+expected <- 30.32639
+variance <- 30.32639
+
+#Raw residual
+rawPoisson <- observed - expected
+rawPoisson
+
+#pearson 
+pearsonPoisson <- (observed - expected)/sqrt(variance)
+
+pearsonPoisson
+
+
+```
+
+For poisson regression we have raw residual = -11.32639
+
+AND the pearson residual = -2.056748
+
+
+
+Now Negative Binomial
+```{r}
+observed <- 19
+expected <- 25.69835
+variance <- varianceNegBin
+
+rawNegBin <- observed - expected
+rawNegBin
+
+
+pearsonNegBin <- (observed - expected)/sqrt(variance)
+pearsonNegBin
+
+```
+
+
+
+For negative binomial regression we have a raw residual of  -6.69835 AND a pearson residual of -0.5655077.
+
+
+# c)
+I prefer the negative binomial model
+
+AIC is much lower for the negative binomial fit, there is a difference of 
+
+```{r}
+860.16-338.45
+
+```
+
+
+There is nothing to suggest we have particularly sparse data. Therefore we can run chi-squared tests on the deviance residuals. Chi-Sq test suggest the poisson regression is not suitable.
+
+They also suggest that the negative binomial regression is suitable.
+
+Finally the pearson and quantile residuals are not approximately standard normal distribution, there are values outside the interval [-5,5]. This reaffirms the poisson regression is not suitble.
+
+The negative binomial pearson and quantile residual plots are approximately standard normal distribution, suggesting the model is appropriate.
+
+Deviance, AIC and residual plots all agree that the negative binomial model is better.
+
+
+
+
+
+
+

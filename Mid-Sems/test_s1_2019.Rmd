@@ -1,0 +1,172 @@
+---
+title: "test_s1_2019"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 1)
+
+# a)
+
+$log(Snapper_i) = \beta_0 +  \beta_2 \times Hahei_i  +  \beta_2 \times TAWH_i  +  \beta_3 \times Season_i +  \beta_4 \times Year_i$
+
+Where $Snapper_i$ refers to the number of snapper for the ith observation.
+$TAWH$ refers to the if the ith observation marine reserve was located in Tawharanui, 1 if yes, 0 if not.
+$Hahei_i$ refers to if the ith observation marine reserve was located in Hahei, 1 if yes, 0 if not
+$Season_i$ refers to the ith observations season, 1 if Spring, 0 if Autumn
+$Year_i$ refers to the iths observations year, 1 if 98-99, 0 if 97-98.
+
+
+# b)
+
+```{r}
+exp(-0.928897)
+exp( -0.66690)
+```
+
+If season is Spring the expected number of Snapper is between 0.3949891 and 0.5132973 times the expected number of Snapper in the same reserve and year but in Autumn.
+
+## Question 2)
+
+# a)
+H0: The sub model is appropriate, the interaction terms can be removed from the model
+
+# b)
+We can reject the null hypothesis; the sub model is NOT appopriate and it is very likely there is at least one interaction between variables.
+## Question 3)
+
+# a)
+We have very sparse data, there exist $\mu_i$ that are smaller than 5. Therefore we should not reply on chi-squared tests. But we can compare deviances.
+
+The deviance in pois2.fit is significantly reduced relative to pois1.fit. This suggests pois1.fit is inapporiate and we should use pois2.fit as our model.
+
+# b)
+It is unclear if pois2fit is appopriate because we do not know if fitted values exceed the value 5. This especcialy given there exist observations less than 5.
+
+## Question 4)
+
+
+I prefer the negative binomial fit. The quasi poisson deviance residuals firstly show a non-constant variance. The first bands variance is smaller than the second and third bands. Secondly the deviance residual should be approximately standard normal N(0,1) and values should be inside the interval [-3,3]. This is false for quasi poisson, we have values above 4 and below -4. All this suggests the model is not appropriate.
+
+Negative binomial quantile residuals are approximately standard normal distributed with mean zero and constant variance, all values are also inside the interval [-3,3]. All suggesting the model is appropriate.
+
+
+
+## Question 5)
+
+# a)
+
+
+i) Poisson Fit
+
+
+$Var_2 = \mu_2$
+
+This indicates $Var_2 = 1.8527$
+
+
+
+ii) Quasi-Poisson
+
+$Var_2 = k \times \mu_2$
+
+Our K values = 3.325656
+
+We can calculate Var_2 below
+```{r}
+k <- 3.245656
+mu2Quasi <- 1.8527
+var2Quasi <- k*mu2Quasi
+var2Quasi
+
+```
+
+$Var_2 = 6.013227$
+
+
+
+
+
+
+iii)  Negative_Binomial Fit
+
+$Var_2 = \mu_2 + \frac{\mu_2^2}{\theta}$
+
+
+We do the calculations below
+```{r}
+mu2NegBin <- 1.5321
+theta <- 1.5522
+
+var2NegBin <- mu2NegBin + (mu2NegBin^2)/theta
+
+var2NegBin
+
+```
+
+We have $Var_2 = 3.04436$
+
+# b) Pearson Residuals
+
+$r_i = \frac {y_i - \hat E(Y_i)}{\sqrt{\hat Var(Y_i)}}$
+
+i) Poisson Pearson Residual
+```{r}
+
+y2 <-  4
+mu2 <- 1.8527
+var2 <- mu2
+
+r2 <- (y2-mu2)/(sqrt(var2))
+
+r2
+
+```
+
+Pearson Residual for Poisson is $r_2 = 1.414424$
+
+
+
+ii) Negative Binomial Pearson Residual
+
+```{r}
+
+y2 <-  4
+mu2 <- 1.5321
+var2 <- var2NegBin
+
+r2 <- (y2-mu2)/(sqrt(mu2))
+r2
+
+```
+Negative Binomial Pearson Residual is $r_2 = 1.993811$
+
+
+
+## Question 6)
+
+We could use dredge complex model with the formula $Snapper ~ Reserve * Season * Year$
+We can do this in R by first fitting a complex model fit <- glm(Snapper ~ Reserve * Season * Year,
+                                                                ...)
+and putting this model inside the dredge function in R
+
+                                                                
+This should work given there are not too many options for R to fit. This process would select the model with the best AICc.
+
+In the unlikely case this fails we could use backward step-wise selection. we can do this in R with the same complex model we fit before (fit <- glm()). Then plug in the code "step(fit, directon = "backward")". Then R will go through each model, removing a variable each time till it thinks it has minimised AIC. R will select the best model for us.
+
+## Question 7)
+
+Firstly We should fit an interaction with Reserves and Spring. In R formula this would be:
+
+$Snapper \sim  Reserve*Spring$
+
+Then we would also include the year variable, which would result in the model
+
+$Snapper \sim Reserve*Spring + Year$
+
