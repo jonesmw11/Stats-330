@@ -1,0 +1,32 @@
+---
+title: "mjon238_Stats_330 Final Exam"
+author: "mjon238"
+date: "14/02/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Question 1
+
+
+
+
+
+
+# Question 2
+
+
+
+
+
+
+# Question 3
+
+
+
+
+
+# Question 4

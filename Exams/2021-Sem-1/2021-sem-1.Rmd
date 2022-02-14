@@ -81,7 +81,7 @@ $$log(\mu_i) = \beta_0 + \beta_1\times log(Dist) + \beta_2\times Urban + \beta_3
 FIRST DISTANCE: SO we can simplify to
 
 $$log(\mu_i) = \beta_0 +  \beta_2\times Urban + log(Dist)(\beta_1 +  \beta_3\times Urban)$$
-
+$\beta_1 + \beta_3 \times Urban$ becomes our coefficient for log Distnace 
 
 The Value $log(Dist)(-1.26959 -0.03484\times Urban)$ Is always negative for distance > 1 and any value of urban, which is true for ALL counties. Therefore we can confirm as distance increases the expected value of log apprentices and thus apprentices migrating decreasses
 
@@ -89,14 +89,118 @@ NOW FOR URBAN
 
 $$log(\mu_i) = \beta_0 + \beta_1\times log(Dist) + Urban (\beta_2 + \beta_3 \times \log(Dist)$$
 
+$\beta_2 + \beta_3 \times log(dist)$ becomes our coefficient for Urban
+
+$Urban (0.11953 -0.03484 \times log(Dist)$ is only positive from SOME values of distance, specifically when Distance is smaller than
+
+When Distnace is greater than 0.309, $(0.11953 -0.03484 \times \log(Dist)$ is smaller than 0 and any increase in urban will have a negative effect on the log of apprentices moving to Edinburgh.
 
 
-$Urban (0.11953 -0.03484 \times \log(Dist)$ is always positive for any value of Distance or Urban, suggesting as urbanisation increases so does the log of apprentices migrating and thus the expected value of apprentices migrating 
+In conclusion the distance and apprentcies is always negatively related.
 
+Urbanisation and apprencietns is dependntent on the level of distnace, when distance is small the relationship is positive, when distance is big it is negative. 
+
+
+
+
+# Question 2)
+
+## a)
 
 ```{r}
-
+exp(-1.1857479)
 
 
 ```
+
+
+Holding all other factors constant, given an additional child under the age 7 year old of a married woman, the odds that same married woman participates in the labor force is multiplied by 0.31.
+
+
+## b) Didn't do this
+
+
+## c)
+
+### i)
+A non-parametric bootstrap was used given in line 5 and 6 we take a sample of real data with replacement.
+
+### ii)
+```{r}
+mean <-  0.8280919
+quantileLow <- 0.6911
+quantileHigh <- 0.9171
+
+c(2*mean - quantileHigh, 2*mean - quantileLow)
+
+
+```
+
+
+Using non-parametric bootstrapping, the 95% (inverted) confidence interval is 0.739, 0.965
+
+
+
+## d)
+
+### i)
+Specificity is the proportion of women that we both predicted and actually Do NOT participate in the labour force out of the total women we predicted do NOT participate in the labour force
+
+Sensitivity is the proportion of married woman that we both predicted and actually DO participate in the labour force out of the total women we predicted participate in the labour force.
+
+### ii)
+```{r}
+#Specificity
+337 /(337+134)
+
+#Sensitivity
+255/(255+146)
+
+#Error Rate
+(134+146)/(134+146+337+255)
+
+```
+
+The specificity is 0.715, the sensitivity is 0.636, the error rate is 0.291
+
+### iii)
+The estimates above are optimistic because we are using the training data to determine test predictive ability. We can generate an honest estimate by separating the data into training data and test data. Train the model using the training data and then we fit the model using test data.
+
+After we have done this we can assess the predictive ability of the model by comparing the fitted test set with the actual. 
+
+We could also use cross-validation but given we have a large number of observations, this is probably unnecessary.
+
+## e)
+
+### i)
+0.467 Represents the cut off point (the value of $p_i$ that determines a success), 0.677 represents the specificity at this cutoff point, 0.713 represents the sensitivity at this cut off point.
+
+### ii)
+The true positive rate is equal to sensitivity, and the false positive rate is equal to 1- specificty
+
+Therefore in this scenario sensitivity is 0.7, and specificity is 0.8
+
+This is not possible because on the ROC plot that very point is above the ROC curve. I.e. no cut off point exists when TPR is at least 0.7, FPR  is at least 0.2.
+
+
+# Question 3)
+## a) 
+Variables F, D, and E have direct causal effects on G
+
+## b)
+
+A, C, D, should be included
+
+## c)
+
+A and C should be included
+
+## d)
+### i)
+A and C are the only confounder
+
+### ii)
+G is the only collider
+
+
 
